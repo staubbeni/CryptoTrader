@@ -1,7 +1,6 @@
-﻿using Crypto.Data;
-using Crypto.DTOs;
+﻿using Crypto.DTOs;
+using Crypto.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Crypto.Controllers;
 
@@ -9,40 +8,24 @@ namespace Crypto.Controllers;
 [ApiController]
 public class PortfolioController : ControllerBase
 {
-    private readonly CryptoDbContext _context;
+    private readonly IPortfolioService _portfolioService;
 
-    public PortfolioController(CryptoDbContext context)
+    public PortfolioController(IPortfolioService portfolioService)
     {
-        _context = context;
+        _portfolioService = portfolioService;
     }
 
     [HttpGet("{userId}")]
     public async Task<IActionResult> GetPortfolio(int userId)
     {
-        var wallet = await _context.Wallets
-            .Include(w => w.Portfolio)
-            .ThenInclude(pi => pi.Cryptocurrency)
-            .FirstOrDefaultAsync(w => w.UserId == userId);
-
-        if (wallet == null)
-            return NotFound("Wallet not found.");
-
-        var portfolioDto = new PortfolioResponseDto
+        try
         {
-            WalletId = wallet.Id,
-            Balance = wallet.Balance,
-            PortfolioItems = wallet.Portfolio.Select(pi => new PortfolioDto
-            {
-                CryptocurrencyId = pi.CryptocurrencyId,
-                CryptocurrencyName = pi.Cryptocurrency.Name,
-                CryptocurrencySymbol = pi.Cryptocurrency.Symbol,
-                Quantity = pi.Quantity,
-                PurchasePrice = pi.PurchasePrice,
-                CurrentPrice = pi.Cryptocurrency.CurrentPrice,
-                CurrentValue = pi.Quantity * pi.Cryptocurrency.CurrentPrice
-            }).ToList()
-        };
-
-        return Ok(portfolioDto);
+            var portfolio = await _portfolioService.GetPortfolioAsync(userId);
+            return Ok(portfolio);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 }

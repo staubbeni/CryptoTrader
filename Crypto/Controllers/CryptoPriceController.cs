@@ -1,8 +1,6 @@
-﻿using Crypto.Data;
-using Crypto.DTOs;
-using Crypto.Models;
+﻿using Crypto.DTOs;
+using Crypto.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Crypto.Controllers;
 
@@ -10,64 +8,42 @@ namespace Crypto.Controllers;
 [ApiController]
 public class CryptoPriceController : ControllerBase
 {
-    private readonly CryptoDbContext _context;
+    private readonly ICryptoPriceService _cryptoPriceService;
 
-    public CryptoPriceController(CryptoDbContext context)
+    public CryptoPriceController(ICryptoPriceService cryptoPriceService)
     {
-        _context = context;
+        _cryptoPriceService = cryptoPriceService;
     }
 
     [HttpPut]
     public async Task<IActionResult> UpdatePrice(CryptoPriceUpdateDto dto)
     {
-        if (dto.NewPrice < 0)
-            return BadRequest("Price cannot be negative.");
-
-        var crypto = await _context.Cryptocurrencies
-            .FirstOrDefaultAsync(c => c.Id == dto.CryptoId);
-
-        if (crypto == null)
-            return NotFound("Cryptocurrency not found.");
-
-        crypto.CurrentPrice = Math.Round(dto.NewPrice, 2);
-
-        _context.PriceHistories.Add(new PriceHistory
+        try
         {
-            CryptocurrencyId = crypto.Id,
-            Price = crypto.CurrentPrice,
-            Timestamp = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync();
-
-        return Ok(new
+            var (message, cryptocurrencyId, newPrice) = await _cryptoPriceService.UpdatePriceAsync(dto);
+            return Ok(new { Message = message, CryptocurrencyId = cryptocurrencyId, NewPrice = newPrice });
+        }
+        catch (KeyNotFoundException ex)
         {
-            Message = "Price updated successfully",
-            CryptocurrencyId = crypto.Id,
-            NewPrice = crypto.CurrentPrice
-        });
+            return NotFound(ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpGet("history/{cryptoId}")]
     public async Task<IActionResult> GetPriceHistory(int cryptoId)
     {
-        var crypto = await _context.Cryptocurrencies
-            .FirstOrDefaultAsync(c => c.Id == cryptoId);
-
-        if (crypto == null)
-            return NotFound("Cryptocurrency not found.");
-
-        var priceHistory = await _context.PriceHistories
-            .Where(ph => ph.CryptocurrencyId == cryptoId)
-            .OrderByDescending(ph => ph.Timestamp)
-            .Select(ph => new CryptoPriceHistoryDto
-            {
-                CryptocurrencyId = ph.CryptocurrencyId,
-                Price = ph.Price,
-                Timestamp = ph.Timestamp
-            })
-            .ToListAsync();
-
-        return Ok(priceHistory);
+        try
+        {
+            var priceHistory = await _cryptoPriceService.GetPriceHistoryAsync(cryptoId);
+            return Ok(priceHistory);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 }

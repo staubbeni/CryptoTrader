@@ -1,8 +1,6 @@
-﻿using Crypto.Data;
-using Crypto.DTOs;
-using Crypto.Models;
+﻿using Crypto.DTOs;
+using Crypto.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Crypto.Controllers;
 
@@ -10,101 +8,70 @@ namespace Crypto.Controllers;
 [ApiController]
 public class UsersController : ControllerBase
 {
-    private readonly CryptoDbContext _context;
+    private readonly IUserService _userService;
 
-    public UsersController(CryptoDbContext context)
+    public UsersController(IUserService userService)
     {
-        _context = context;
+        _userService = userService;
     }
 
     [HttpPost("register")]
     public async Task<IActionResult> Register(UserRegisterDto dto)
     {
-        if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
-            return BadRequest("Email already exists.");
-
-        var user = new User
+        try
         {
-            Username = dto.Username,
-            Email = dto.Email,
-            Password = dto.Password 
-        };
-
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
-
-       
-        var wallet = new Wallet
+            var user = await _userService.RegisterAsync(dto);
+            return Ok(new { user.Id, user.Username, user.Email });
+        }
+        catch (InvalidOperationException ex)
         {
-            UserId = user.Id,
-            Balance = 1000.00 
-        };
-
-        _context.Wallets.Add(wallet);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { user.Id, user.Username, user.Email });
+            return BadRequest(ex.Message);
+        }
     }
+
     [HttpGet("{userId}")]
     public async Task<IActionResult> GetUser(int userId)
     {
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == userId);
-
-        if (user == null)
-            return NotFound("User not found.");
-
-        return Ok(new UserResponseDto
+        try
         {
-            Id = user.Id,
-            Username = user.Username,
-            Email = user.Email
-        });
+            var user = await _userService.GetUserAsync(userId);
+            return Ok(user);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 
-    
     [HttpPut("{userId}")]
     public async Task<IActionResult> UpdateUser(int userId, UserUpdateDto dto)
     {
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == userId);
-
-        if (user == null)
-            return NotFound("User not found.");
-
-        
-        if (dto.Email != user.Email && await _context.Users.AnyAsync(u => u.Email == dto.Email && u.Id != userId))
-            return BadRequest("Email already exists.");
-
-        
-        user.Username = dto.Username;
-        user.Email = dto.Email;
-        if (!string.IsNullOrEmpty(dto.Password)) 
-            user.Password = dto.Password; 
-
-        await _context.SaveChangesAsync();
-
-        return Ok(new UserResponseDto
+        try
         {
-            Id = user.Id,
-            Username = user.Username,
-            Email = user.Email
-        });
+            var user = await _userService.UpdateUserAsync(userId, dto);
+            return Ok(user);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
-    
     [HttpDelete("{userId}")]
     public async Task<IActionResult> DeleteUser(int userId)
     {
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == userId);
-
-        if (user == null)
-            return NotFound("User not found.");
-
-        _context.Users.Remove(user);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
+        try
+        {
+            await _userService.DeleteUserAsync(userId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 }

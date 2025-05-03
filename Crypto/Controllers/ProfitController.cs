@@ -1,7 +1,6 @@
-﻿using Crypto.Data;
-using Crypto.DTOs;
+﻿using Crypto.DTOs;
+using Crypto.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Crypto.Controllers;
 
@@ -9,76 +8,45 @@ namespace Crypto.Controllers;
 [ApiController]
 public class ProfitController : ControllerBase
 {
-    private readonly CryptoDbContext _context;
+    private readonly IWalletService _walletService;
 
-    public ProfitController(CryptoDbContext context)
+    public ProfitController(IWalletService walletService)
     {
-        _context = context;
+        _walletService = walletService;
     }
+
 
     [HttpGet("{userId}")]
     public async Task<IActionResult> GetProfit(int userId)
     {
-        var wallet = await _context.Wallets
-            .Include(w => w.Portfolio)
-            .ThenInclude(pi => pi.Cryptocurrency)
-            .FirstOrDefaultAsync(w => w.UserId == userId);
-
-        if (wallet == null)
-            return NotFound("Wallet not found.");
-
-        double totalProfit = wallet.Portfolio.Sum(pi =>
-            (pi.Cryptocurrency.CurrentPrice - pi.PurchasePrice) * pi.Quantity);
-
-        totalProfit = Math.Round(totalProfit, 2);
-
-        var response = new ProfitResponseDto
+        try
         {
-            UserId = userId,
-            TotalProfit = totalProfit
-        };
-
-        return Ok(response);
+            var profit = await _walletService.GetProfitAsync(userId);
+            return Ok(profit);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 
     [HttpGet("details/{userId}")]
     public async Task<IActionResult> GetProfitDetails(int userId)
     {
-        var wallet = await _context.Wallets
-            .Include(w => w.Portfolio)
-            .ThenInclude(pi => pi.Cryptocurrency)
-            .FirstOrDefaultAsync(w => w.UserId == userId);
-
-        if (wallet == null)
-            return NotFound("Wallet not found.");
-
-        var portfolioItems = wallet.Portfolio.Select(pi => new PortfolioDto
+        try
         {
-            CryptocurrencyId = pi.CryptocurrencyId,
-            CryptocurrencyName = pi.Cryptocurrency.Name,
-            CryptocurrencySymbol = pi.Cryptocurrency.Symbol,
-            Quantity = pi.Quantity,
-            PurchasePrice = pi.PurchasePrice,
-            CurrentPrice = pi.Cryptocurrency.CurrentPrice,
-            CurrentValue = Math.Round(pi.Quantity * pi.Cryptocurrency.CurrentPrice, 2),
-            Profit = Math.Round((pi.Cryptocurrency.CurrentPrice - pi.PurchasePrice) * pi.Quantity, 2)
-        }).ToList();
-
-        double totalProfit = portfolioItems.Sum(pi => pi.Profit);
-
-        var response = new PortfolioResponseDto
+            var details = await _walletService.GetProfitDetailsAsync(userId);
+            return Ok(new
+            {
+                details.WalletId,
+                details.Balance,
+                TotalProfit = details.PortfolioItems.Sum(pi => pi.Profit),
+                details.PortfolioItems
+            });
+        }
+        catch (KeyNotFoundException ex)
         {
-            WalletId = wallet.Id,
-            Balance = wallet.Balance,
-            PortfolioItems = portfolioItems
-        };
-
-        return Ok(new
-        {
-            response.WalletId,
-            response.Balance,
-            TotalProfit = totalProfit,
-            response.PortfolioItems
-        });
+            return NotFound(ex.Message);
+        }
     }
 }
