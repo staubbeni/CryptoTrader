@@ -14,6 +14,7 @@ public class CryptoDbContext : DbContext
     public DbSet<PortfolioItem> PortfolioItems { get; set; }
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<PriceHistory> PriceHistories { get; set; }
+    public DbSet<LimitOrder> LimitOrders { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
